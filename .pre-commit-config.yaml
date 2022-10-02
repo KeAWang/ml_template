@@ -1,0 +1,13 @@
+repos:
+
+  - repo: https://github.com/psf/black
+    rev: 22.6.0 
+    hooks:
+    - id: black
+
+  - repo: https://github.com/pycqa/isort
+    rev: 5.10.1
+    hooks:
+      - id: isort
+        args: ["--profile", "black"] # see https://github.com/PyCQA/isort/issues/1518
+        name: isort (python)

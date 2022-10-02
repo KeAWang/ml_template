@@ -1,0 +1,27 @@
+# local package
+-e ./src/
+
+# repo management
+pre-commit
+isort==5.10.1
+black==22.6.0
+flake8
+mypy
+
+numpy
+scipy
+pandas
+scikit-learn
+matplotlib
+seaborn
+jupyterlab
+torch==1.12.1 --extra-index-url https://download.pytorch.org/whl/cu113
+
+# project specific
+git+https://github.com/KeAWang/kondo.git
+
+# tooling
+tqdm
+rich
+wandb
+plotly  # for wandb to log plots instead of images
