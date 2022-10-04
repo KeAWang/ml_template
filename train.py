@@ -38,27 +38,54 @@ def loss_fn(model, batch):
     return loss
 
 
-def plot_arrays(x, y):
-    fig, ax = plt.subplots()
+def plot_arrays(x, y, ax=None):
+    if ax is None:
+        fig, ax = plt.subplots()
     ax.plot(x, y)
+    fig = ax.get_figure()
     return fig
 
 
-def eval_on_batch(model, batch):
+def make_prediction_plot(model, batch):
     x, y = batch
-
-    metrics, figs = {}, {}
-
     with torch.no_grad():
-        loss = loss_fn(model, batch)
-        metrics["loss"] = loss.item()
+        y_pred = model(x)
+    # functionally separate the forward pass from the plotting function so that we can reuse the plotting function
+    fig, ax = plt.subplots()
+    _ = plot_arrays(to_numpy(x), to_numpy(y), ax=ax)
+    _ = plot_arrays(to_numpy(x), to_numpy(y_pred), ax=ax)
+    return fig
 
+
+def visualize_batch(model, batch):
+    """helper function to call all the make_*_plots functions"""
+    figs = {}
     # add more plotting functions here
     # plotting functions should return a matplotlib Figure
-    fig = plot_arrays(to_numpy(x), to_numpy(y))
+    fig = make_prediction_plot(model, batch)
     figs["prediction"] = fig
+    return figs
 
-    return metrics, figs
+
+def eval_fixed_batch(model, batch):
+    metrics = {}
+    loss = loss_fn(model, batch)
+    metrics["loss"] = loss.item()
+    return metrics
+
+
+@torch.no_grad()
+def validate(model, valloader):
+    model.eval()
+    metrics = {}
+    for batch in valloader:
+        metrics = eval_fixed_batch(model, batch)
+        metrics.update(metrics)
+    return metrics
+
+
+def prepend_phase(phase, dictionary):
+    return {f"{phase}_{k}": v for k, v in dictionary.items()}
 
 
 def run(config: DotDict, run_dir: Path, wandb_run=DummyWanb.init()):
@@ -74,10 +101,10 @@ def run(config: DotDict, run_dir: Path, wandb_run=DummyWanb.init()):
     # wandb_run.watch(model, **config.watch)  # log gradients of model, not compatible with ScriptModules
     num_batches_per_epoch = len(trainloader)  # won't work for iter type dataloaders
     trainloader_iter = iter(trainloader)
-    valloader_iter = iter(valloader)
 
-    fixed_train_samples = next(trainloader_iter)  # fix some samples for metrics
-    fixed_val_samples = next(valloader_iter)  # only use one batch for validation
+    # fix some samples for metrics and figures
+    fixed_train_samples = next(iter(trainloader))
+    fixed_val_samples = next(iter(valloader))
     fixed_samples = dict(train=fixed_train_samples, val=fixed_val_samples)
 
     if config.train:
@@ -85,7 +112,7 @@ def run(config: DotDict, run_dir: Path, wandb_run=DummyWanb.init()):
             epoch = 1 + after_i_updates // num_batches_per_epoch
             wandb_run.log({"epoch": epoch}, commit=False)
 
-            # loop through batches indefinitely
+            # loop through batches indefinitely and fetch data
             try:
                 batch = next(trainloader_iter)  # may be good to add a batch_idx
             except StopIteration:
@@ -94,35 +121,40 @@ def run(config: DotDict, run_dir: Path, wandb_run=DummyWanb.init()):
             x, y = [_.to(config.device, non_blocking=True).contiguous() for _ in batch]
             batch = (x, y)  # TODO: make into a dataclass?
 
+            # forward pass stuff
             model.train()
             optimizer.zero_grad()
             loss = loss_fn(model, batch)
             wandb_run.log({"train/loss": loss.item()}, commit=False)
 
+            # backward pass stuff
             loss.backward()
             grad_norm = torch.nn.utils.clip_grad.clip_grad_norm_(
                 model.parameters(), max_norm=1e2, error_if_nonfinite=True
             )
             wandb_run.log({"train/grad_norm": grad_norm.item()}, commit=False)
 
+            # lr scheduling stuff and optimizer step
             lr = learning_rate_schedule(after_i_updates + 1, config.lr_warmup_steps, config.lr, config.num_updates)
             set_learning_rate(optimizer, lr)
             wandb_run.log({"lr": lr}, commit=False)
-
             optimizer.step()
 
             # Training metrics and figures
             model.eval()
-            if after_i_updates % config.eval_every_n_steps == 0:
+            if after_i_updates % config.val_every_n_steps == 0:
+                # validate on full validation set
+                val_metrics = validate(model, valloader)
+                val_metrics = prepend_phase("val", val_metrics)
+                wandb_run.log(val_metrics, commit=False)
+
+                # validation on fixed samples; good for plots for example
                 for phase in ["train", "val"]:
-                    metrics, figs = eval_on_batch(
+                    figs = visualize_batch(
                         model,
                         fixed_samples[phase],
                     )
-                    metrics = {f"{phase}/{k}": v for k, v in metrics.items()}
-                    figs = {f"{phase}/{k}": v for k, v in figs.items()}
-
-                    wandb_run.log(metrics, commit=False)
+                    figs = prepend_phase(phase, figs)
                     wandb_run.log(figs, commit=False)
 
                     [plt.close(f) for f in figs.values()]
@@ -147,7 +179,7 @@ def main(**config) -> None:
         wandb = DummyWanb
         config.seed = 0
         # config.num_updates = 1
-        # config.eval_every_n_steps = 1
+        # config.val_every_n_steps = 1
     else:
         import wandb
 
@@ -191,7 +223,7 @@ if __name__ == "__main__":
     parser.add_argument("--weight_decay", default=1e-5, type=float)
     parser.add_argument("--lr_warmup_steps", default=10, type=int)
     # training stuff
-    parser.add_argument("--eval_every_n_steps", default=100, type=int)
+    parser.add_argument("--val_every_n_steps", default=100, type=int)
     FLAGS = parser.parse_args()
 
     main(**FLAGS.__dict__)
