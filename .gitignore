@@ -82,6 +82,8 @@ target/
 /wandb/
 *.csv
 *.npz
+# exclude pytorch model weights
+*.pt
 
 # Mac OS-specific storage files
 .DS_Store
