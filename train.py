@@ -163,7 +163,8 @@ def run(config: OmegaConf, run_dir: Path, wandb_run=DummyWanb.init()):
                 wandb_run.save(str(model_path))
                 print(f"Saved model after {after_i_updates} updates")
 
-            wandb_run.log({"after_gradient_updates": after_i_updates}, commit=True)  # finally commit it all at the end
+            wandb_run.log({"after_gradient_updates": after_i_updates}, commit=False)
+            wandb_run.log({}, commit=True) # finally commit it all at the end
 
     # TODO: test phase
     if config.evaluate:
