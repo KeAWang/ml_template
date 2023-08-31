@@ -84,7 +84,7 @@ def validate(model, valloader):
 
 
 def prepend_phase(phase, dictionary):
-    return {f"{phase}_{k}": v for k, v in dictionary.items()}
+    return {f"{phase}/{k}": v for k, v in dictionary.items()}
 
 
 def run(config: OmegaConf, run_dir: Path, wandb_run=DummyWanb.init()):
