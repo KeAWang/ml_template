@@ -137,7 +137,6 @@ def run(config: OmegaConf, run_dir: Path, wandb_run=DummyWanb.init()):
             lr = learning_rate_schedule(after_i_updates + 1, config.lr_warmup_steps, config.lr, config.num_updates)
             set_learning_rate(optimizer, lr)
             wandb_run.log({"lr": lr}, commit=False)
-            optimizer.step()
 
             # Training metrics and figures
             model.eval()
@@ -162,6 +161,9 @@ def run(config: OmegaConf, run_dir: Path, wandb_run=DummyWanb.init()):
                 torch.save(model.state_dict(), model_path)
                 wandb_run.save(str(model_path))
                 print(f"Saved model after {after_i_updates} updates")
+
+            # update after we get all the metrics and figures; note this  means we don't get the metric of the last iterate
+            optimizer.step()
 
             wandb_run.log({"after_gradient_updates": after_i_updates}, commit=False)
             wandb_run.log({}, commit=True) # finally commit it all at the end
