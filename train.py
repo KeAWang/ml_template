@@ -12,7 +12,6 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from ml_template.models import MLP
 from ml_template.utils import (
-    DotDict,
     learning_rate_schedule,
     seed_everything,
     set_learning_rate,
@@ -88,7 +87,7 @@ def prepend_phase(phase, dictionary):
     return {f"{phase}_{k}": v for k, v in dictionary.items()}
 
 
-def run(config: DotDict, run_dir: Path, wandb_run=DummyWanb.init()):
+def run(config: OmegaConf, run_dir: Path, wandb_run=DummyWanb.init()):
     seed_everything(config.seed)
 
     #### Load data
@@ -173,7 +172,7 @@ def run(config: DotDict, run_dir: Path, wandb_run=DummyWanb.init()):
 
 def main(**config) -> None:
     # Instantiate config
-    config = DotDict(config)
+    config = OmegaConf.create(config)
 
     if config.debug:  # settings for quick development run
         wandb = DummyWanb
@@ -186,10 +185,19 @@ def main(**config) -> None:
     #### Set up logger
     tags = config.tags.split()  # assume "tag1 tag2 tag3"
     wandb_run = wandb.init(
-        project=config.project, notes=config.notes, tags=tags, config=config, name=config.name, group=config.group
+        project=config.project, notes=config.notes, tags=tags, config=OmegaConf.to_object(config), name=config.name, group=config.group
     )
     run_dir = Path(wandb_run.dir).resolve()
     wandb_run.config.update(dict(run_dir=str(run_dir)))
+
+    if config.device is None:
+        if torch.backends.mps.is_available():
+            device = torch.device("mps")
+        elif torch.cuda.is_available():
+            device = torch.device("cuda")
+        else:
+            device = torch.device("cpu")
+        config.device = device
 
     #### Train and evaluate
     _ = run(config, run_dir, wandb_run)
@@ -207,6 +215,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", default=17, type=int)
     parser.add_argument("--train", action="store_true")
     parser.add_argument("--evaluate", action="store_true")
+    parser.add_argument("--device", default="cpu", type=str)
     # logger stuff
     parser.add_argument("--project", default="ml_template", type=str)
     parser.add_argument("--name", default="", type=str)

@@ -25,3 +25,4 @@ tqdm
 rich
 wandb
 plotly  # for wandb to log plots instead of images
+omegaconf
