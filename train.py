@@ -106,8 +106,9 @@ def run(config: OmegaConf, run_dir: Path, wandb_run=DummyWanb.init()):
     fixed_val_samples = next(iter(valloader))
     fixed_samples = dict(train=fixed_train_samples, val=fixed_val_samples)
 
+    iterator = range(config.num_updates + 1) if config.debug else tqdm(range(config.num_updates + 1))
     if config.train:
-        for after_i_updates in tqdm(range(config.num_updates + 1)):
+        for after_i_updates in iterator:
             epoch = 1 + after_i_updates // num_batches_per_epoch
             wandb_run.log({"epoch": epoch}, commit=False)
 
